@@ -172,7 +172,7 @@ bool ExecutorStd::IsScheduled(const Tag tag) const {
   return schedule_.Contains([&tag](const Entry& e) { return e.tag == tag; });
 }
 
-absl::optional<Executor::TaggedOperation> ExecutorStd::PopFromSchedule() {
+absl::optional<TaggedOperation> ExecutorStd::PopFromSchedule() {
   auto removed =
       schedule_.RemoveIf([](const Entry& e) { return !e.IsImmediate(); });
   if (!removed.has_value()) {

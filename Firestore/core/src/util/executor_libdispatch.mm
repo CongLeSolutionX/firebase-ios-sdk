@@ -80,7 +80,7 @@ class TimeSlot {
 
   // Returns the operation that was scheduled for this time slot and turns the
   // slot into a no-op.
-  Executor::TaggedOperation UnscheduleLocked();
+  TaggedOperation UnscheduleLocked();
 
   void MarkDone() {
     done_ = true;
@@ -134,11 +134,11 @@ TimeSlot::TimeSlot(ExecutorLibdispatch* const executor,
   done_ = false;
 }
 
-Executor::TaggedOperation TimeSlot::UnscheduleLocked() {
+TaggedOperation TimeSlot::UnscheduleLocked() {
   if (!done_) {
     executor_->TryCancelLocked(id_);
   }
-  return Executor::TaggedOperation(tag_, std::move(operation_));
+  return TaggedOperation(tag_, std::move(operation_));
 }
 
 void TimeSlot::InvokedByLibdispatch(void* raw_self) {
@@ -277,8 +277,7 @@ bool ExecutorLibdispatch::IsScheduled(const Tag tag) const {
                      });
 }
 
-absl::optional<Executor::TaggedOperation>
-ExecutorLibdispatch::PopFromSchedule() {
+absl::optional<TaggedOperation> ExecutorLibdispatch::PopFromSchedule() {
   std::lock_guard<std::mutex> lock(mutex_);
 
   if (schedule_.empty()) {

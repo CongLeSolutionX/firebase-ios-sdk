@@ -30,6 +30,7 @@ namespace firestore {
 namespace util {
 
 class DelayedOperation;
+struct TaggedOperation;
 
 // An interface to a platform-specific executor of asynchronous operations
 // (called tasks on other platforms).
@@ -56,20 +57,6 @@ class Executor {
   using Clock = std::chrono::steady_clock;
   using TimePoint = std::chrono::time_point<Clock, Milliseconds>;
 
-  // Operations scheduled for future execution have an opaque tag. The value of
-  // the tag is ignored by the executor but can be used to find operations with
-  // a given tag after they are scheduled.
-  struct TaggedOperation {
-    TaggedOperation() = default;
-
-    TaggedOperation(const Tag tag, Operation&& operation)
-        : tag{tag}, operation{std::move(operation)} {
-    }
-
-    Tag tag = 0;
-    Operation operation;
-  };
-
   // Creates a new serial Executor of the platform-appropriate type, and gives
   // it the given label, if the implementation supports it.
   //
@@ -92,10 +79,14 @@ class Executor {
   // Like `Execute`, but blocks until the `operation` finishes, consequently
   // draining immediate operations from the executor.
   virtual void ExecuteBlocking(Operation&& operation) = 0;
+
   // Scheduled the given `operation` to be executed after `delay` milliseconds
   // from now, and returns a handle that allows to cancel the operation
-  // (provided it hasn't been run already). The operation is tagged to allow
-  // retrieving it later.
+  // (provided it hasn't been run already).
+  //
+  // Operations scheduled for future execution have an opaque tag. The value of
+  // the tag is ignored by the executor but can be used to find operations with
+  // a given tag after they are scheduled.
   //
   // `delay` must be non-negative; use `Execute` to schedule operations for
   // immediate execution.
@@ -160,6 +151,18 @@ class DelayedOperation {
   Executor* executor_;
   Executor::Id id_;
   bool canceled_ = true;
+};
+
+// A pair of Tag and Operation, returned from PopFromSchedule.
+struct TaggedOperation {
+  TaggedOperation() = default;
+
+  TaggedOperation(const Executor::Tag tag, Executor::Operation&& operation)
+      : tag{tag}, operation{std::move(operation)} {
+  }
+
+  Executor::Tag tag = 0;
+  Executor::Operation operation;
 };
 
 inline Executor::TimePoint MakeTargetTime(Executor::Milliseconds delay) {
