@@ -231,7 +231,7 @@ DelayedOperation ExecutorLibdispatch::Schedule(Milliseconds delay,
   {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    id = NextId();
+    id = NextIdLocked();
     time_slot = new TimeSlot(this, delay, tag, id, std::move(operation));
     schedule_[id] = time_slot;
   }
@@ -293,7 +293,7 @@ absl::optional<TaggedOperation> ExecutorLibdispatch::PopFromSchedule() {
   return nearest->second->UnscheduleLocked();
 }
 
-ExecutorLibdispatch::Id ExecutorLibdispatch::NextId() {
+ExecutorLibdispatch::Id ExecutorLibdispatch::NextIdLocked() {
   // The wrap around after ~4 billion operations is explicitly ignored. Even if
   // an instance of `ExecutorLibdispatch` runs long enough to get `current_id_`
   // to overflow, it's extremely unlikely that any object still holds a

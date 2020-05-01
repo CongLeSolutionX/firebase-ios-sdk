@@ -76,7 +76,7 @@ class ExecutorLibdispatch : public Executor {
   using ScheduleEntry = ScheduleMap::value_type;
 
   void TryCancelLocked(Id operation_id);
-  Id NextId();
+  Id NextIdLocked();
 
   mutable std::mutex mutex_;
 
