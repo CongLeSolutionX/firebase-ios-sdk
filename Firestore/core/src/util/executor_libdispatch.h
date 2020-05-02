@@ -41,8 +41,6 @@ namespace firebase {
 namespace firestore {
 namespace util {
 
-class TimeSlot;
-
 // A serial queue built on top of libdispatch. The operations are run on
 // a dedicated serial dispatch queue.
 class ExecutorLibdispatch : public Executor {
@@ -60,10 +58,9 @@ class ExecutorLibdispatch : public Executor {
                             Tag tag,
                             Operation&& operation) override;
 
-  void TryCancel(Id operation_id) override;
-
   bool IsScheduled(Tag tag) const override;
-  absl::optional<TaggedOperation> PopFromSchedule() override;
+  bool IsTaskScheduled(Id id) const override;
+  absl::optional<Task> PopFromSchedule() override;
 
   dispatch_queue_t dispatch_queue() const {
     return dispatch_queue_;
@@ -72,10 +69,15 @@ class ExecutorLibdispatch : public Executor {
  private:
   friend class TimeSlot;
 
-  using ScheduleMap = std::unordered_map<Id, TimeSlot*>;
+  using ScheduleMap = std::unordered_map<Id, Task*>;
   using ScheduleEntry = ScheduleMap::value_type;
 
-  void TryCancelLocked(Id operation_id);
+  void Complete(Tag tag, Id operation_id) override;
+  void Cancel(Id operation_id) override;
+
+  static void InvokeAsync(void* raw_task);
+  static void InvokeSync(void* raw_task);
+
   Id NextIdLocked();
 
   mutable std::mutex mutex_;

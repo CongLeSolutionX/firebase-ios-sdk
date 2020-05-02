@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 Google
+ * Copyright 2018 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@
 #include <thread>  // NOLINT(build/c++11)
 
 #include "Firestore/core/src/util/executor.h"
+#include "Firestore/core/src/util/task.h"
 #include "gtest/gtest.h"
 
 namespace firebase {
@@ -38,8 +39,8 @@ using testutil::Expectation;
 DelayedOperation Schedule(Executor* const executor,
                           const Executor::Milliseconds delay,
                           Executor::Operation&& operation) {
-  const Executor::Tag no_tag = -1;
-  return executor->Schedule(delay, no_tag, std::move(operation));
+  static const Executor::Tag test_tag = 42;
+  return executor->Schedule(delay, test_tag, std::move(operation));
 }
 
 }  // namespace
@@ -199,13 +200,13 @@ TEST_P(ExecutorTest, OperationsCanBeRemovedFromScheduleBeforeTheyRun) {
 
   auto maybe_operation = executor->PopFromSchedule();
   ASSERT_TRUE(maybe_operation.has_value());
-  EXPECT_EQ(maybe_operation->tag, tag_foo);
+  EXPECT_EQ(maybe_operation->tag(), tag_foo);
   EXPECT_FALSE(executor->IsScheduled(tag_foo));
   EXPECT_TRUE(executor->IsScheduled(tag_bar));
 
   maybe_operation = executor->PopFromSchedule();
   ASSERT_TRUE(maybe_operation.has_value());
-  EXPECT_EQ(maybe_operation->tag, tag_bar);
+  EXPECT_EQ(maybe_operation->tag(), tag_bar);
   EXPECT_FALSE(executor->IsScheduled(tag_bar));
 
   // Schedule should now be empty.
@@ -226,18 +227,18 @@ TEST_P(ExecutorTest, DuplicateTagsOnOperationsAreAllowed) {
 
   auto maybe_operation = executor->PopFromSchedule();
   ASSERT_TRUE(maybe_operation.has_value());
-  EXPECT_EQ(maybe_operation->tag, tag_foo);
+  EXPECT_EQ(maybe_operation->tag(), tag_foo);
   // There's still another operation with the same tag in the schedule.
   EXPECT_TRUE(executor->IsScheduled(tag_foo));
 
-  maybe_operation->operation();
+  maybe_operation->Execute();
 
   maybe_operation = executor->PopFromSchedule();
   ASSERT_TRUE(maybe_operation.has_value());
-  EXPECT_EQ(maybe_operation->tag, tag_foo);
+  EXPECT_EQ(maybe_operation->tag(), tag_foo);
   EXPECT_FALSE(executor->IsScheduled(tag_foo));
 
-  maybe_operation->operation();
+  maybe_operation->Execute();
   // Despite having the same tag, the operations should have been ordered
   // according to their scheduled time and preserved their identity.
   EXPECT_EQ(steps, "12");

@@ -20,6 +20,8 @@
 #include <atomic>
 
 #include "Firestore/core/src/util/hard_assert.h"
+#include "Firestore/core/src/util/log.h"
+#include "Firestore/core/src/util/task.h"
 
 namespace firebase {
 namespace firestore {
@@ -70,96 +72,6 @@ absl::string_view GetCurrentQueueLabel() {
 //   The reverse is not true: a canceled time slot is removed from the executor,
 //   but won't be destroyed until its original due time is past.
 
-class TimeSlot {
- public:
-  TimeSlot(ExecutorLibdispatch* const executor,
-           Executor::Milliseconds delay,
-           Executor::Tag tag,
-           Executor::Id id,
-           Executor::Operation&& operation);
-
-  // Returns the operation that was scheduled for this time slot and turns the
-  // slot into a no-op.
-  TaggedOperation UnscheduleLocked();
-
-  void MarkDone() {
-    done_ = true;
-  }
-
-  static void InvokedByLibdispatch(void* raw_self);
-
-  bool operator<(const TimeSlot& rhs) const {
-    // Order by target time, then by the order in which entries were created.
-    if (target_time_ < rhs.target_time_) {
-      return true;
-    }
-    if (target_time_ > rhs.target_time_) {
-      return false;
-    }
-
-    return id_ < rhs.id_;
-  }
-  bool operator==(const Executor::Tag tag) const {
-    return tag_ == tag;
-  }
-
- private:
-  void Execute();
-
-  ExecutorLibdispatch* const executor_;
-  const Executor::TimePoint target_time_;  // Used for sorting
-  Executor::Tag tag_ = 0;
-  Executor::Id id_ = 0;
-  Executor::Operation operation_;
-
-  // True if the operation has either been run or canceled.
-  //
-  // Note on thread-safety: this variable is accessed both from the dispatch
-  // queue and in the destructor, which may run on any queue.
-  std::atomic<bool> done_;
-};
-
-TimeSlot::TimeSlot(ExecutorLibdispatch* const executor,
-                   const Executor::Milliseconds delay,
-                   Executor::Tag tag,
-                   Executor::Id id,
-                   Executor::Operation&& operation)
-    : executor_(executor),
-      target_time_(MakeTargetTime(delay)),
-      tag_(tag),
-      id_(id),
-      operation_(std::move(operation)) {
-  // Only assignment of std::atomic is atomic; initialization in its constructor
-  // isn't
-  done_ = false;
-}
-
-TaggedOperation TimeSlot::UnscheduleLocked() {
-  if (!done_) {
-    executor_->TryCancelLocked(id_);
-  }
-  return TaggedOperation(tag_, std::move(operation_));
-}
-
-void TimeSlot::InvokedByLibdispatch(void* raw_self) {
-  auto const self = static_cast<TimeSlot*>(raw_self);
-  self->Execute();
-  delete self;
-}
-
-void TimeSlot::Execute() {
-  if (done_) {
-    // `done_` might mean that the executor is already destroyed, so don't call
-    // `RemoveFromSchedule`.
-    return;
-  }
-
-  executor_->TryCancel(id_);
-
-  HARD_ASSERT(operation_, "TimeSlot contains an invalid function object");
-  operation_();
-}
-
 // MARK: - ExecutorLibdispatch
 
 ExecutorLibdispatch::ExecutorLibdispatch(const dispatch_queue_t dispatch_queue)
@@ -167,6 +79,8 @@ ExecutorLibdispatch::ExecutorLibdispatch(const dispatch_queue_t dispatch_queue)
 }
 
 ExecutorLibdispatch::~ExecutorLibdispatch() {
+  std::lock_guard<std::mutex> lock(mutex_);
+
   // Turn any operations that might still be in the queue into no-ops, lest
   // they try to access `ExecutorLibdispatch` after it gets destroyed. Because
   // the queue is serial, by the time libdispatch gets to the newly-enqueued
@@ -175,7 +89,7 @@ ExecutorLibdispatch::~ExecutorLibdispatch() {
   // Note: this is thread-safe, because the underlying variable `done_` is
   // atomic. `RunSynchronized` may result in a deadlock.
   for (const auto& entry : schedule_) {
-    entry.second->MarkDone();
+    entry.second->Dispose();
   }
 }
 
@@ -192,13 +106,8 @@ std::string ExecutorLibdispatch::Name() const {
 void ExecutorLibdispatch::Execute(Operation&& operation) {
   // Dynamically allocate the function to make sure the object is valid by the
   // time libdispatch gets to it.
-  const auto wrap = new std::function<void()>{std::move(operation)};
-
-  dispatch_async_f(dispatch_queue_, wrap, [](void* const raw_work) {
-    const auto unwrap = static_cast<std::function<void()>*>(raw_work);
-    (*unwrap)();
-    delete unwrap;
-  });
+  auto task = new Task(this, std::move(operation));
+  dispatch_async_f(dispatch_queue_, task, InvokeAsync);
 }
 
 void ExecutorLibdispatch::ExecuteBlocking(Operation&& operation) {
@@ -207,11 +116,9 @@ void ExecutorLibdispatch::ExecuteBlocking(Operation&& operation) {
       "Calling DispatchSync on the current queue will lead to a deadlock.");
 
   // Unlike dispatch_async_f, dispatch_sync_f blocks until the work passed to it
-  // is done, so passing a reference to a local variable is okay.
-  dispatch_sync_f(dispatch_queue_, &operation, [](void* const raw_work) {
-    const auto unwrap = static_cast<std::function<void()>*>(raw_work);
-    (*unwrap)();
-  });
+  // is done, so passing a pointer to a local variable is okay.
+  Task task(this, std::move(operation));
+  dispatch_sync_f(dispatch_queue_, &task, InvokeSync);
 }
 
 DelayedOperation ExecutorLibdispatch::Schedule(Milliseconds delay,
@@ -226,32 +133,34 @@ DelayedOperation ExecutorLibdispatch::Schedule(Milliseconds delay,
   // to outlive the executor, and it's possible for work to be invoked by
   // libdispatch after the executor is destroyed. The Executor only stores an
   // observer pointer to the operation.
-  TimeSlot* time_slot = nullptr;
+  Task* task = nullptr;
+  TimePoint target_time = MakeTargetTime(delay);
   Id id = 0;
   {
     std::lock_guard<std::mutex> lock(mutex_);
 
     id = NextIdLocked();
-    time_slot = new TimeSlot(this, delay, tag, id, std::move(operation));
-    schedule_[id] = time_slot;
+    task = new Task(this, target_time, tag, id, std::move(operation));
+    schedule_[id] = task;
   }
 
-  dispatch_after_f(delay_ns, dispatch_queue_, time_slot,
-                   TimeSlot::InvokedByLibdispatch);
+  dispatch_after_f(delay_ns, dispatch_queue_, task, InvokeAsync);
 
   return DelayedOperation(this, id);
 }
 
-void ExecutorLibdispatch::TryCancel(Id to_remove) {
-  // `time_slot` might have been destroyed by the time cancellation function
-  // runs, in which case it's guaranteed to have been removed from the
-  // `schedule_`. If the `time_slot_id` refers to a slot that has been
-  // removed, the call to `RemoveFromSchedule` will be a no-op.
+void ExecutorLibdispatch::Complete(Tag tag, Id operation_id) {
+  if (tag == kNoTag) {
+    return;
+  }
+
   std::lock_guard<std::mutex> lock(mutex_);
-  TryCancelLocked(to_remove);
+  schedule_.erase(operation_id);
 }
 
-void ExecutorLibdispatch::TryCancelLocked(Id to_remove) {
+void ExecutorLibdispatch::Cancel(Id to_remove) {
+  std::lock_guard<std::mutex> lock(mutex_);
+
   // `time_slot` might have been destroyed by the time cancellation function
   // runs, in which case it's guaranteed to have been removed from the
   // `schedule_`. If the `time_slot_id` refers to a slot that has been
@@ -261,23 +170,47 @@ void ExecutorLibdispatch::TryCancelLocked(Id to_remove) {
   // It's possible for the operation to be missing if libdispatch gets to run
   // it after it was force-run, for example.
   if (found != schedule_.end()) {
-    found->second->MarkDone();
+    found->second->Dispose();
     schedule_.erase(found);
   }
 }
 
-// Test-only methods
-
-bool ExecutorLibdispatch::IsScheduled(const Tag tag) const {
-  std::lock_guard<std::mutex> lock(mutex_);
-
-  return std::any_of(schedule_.begin(), schedule_.end(),
-                     [&tag](const ScheduleEntry& operation) {
-                       return *operation.second == tag;
-                     });
+void ExecutorLibdispatch::InvokeAsync(void* raw_task) {
+  auto task = static_cast<Task*>(raw_task);
+  task->Execute();
+  delete task;
 }
 
-absl::optional<TaggedOperation> ExecutorLibdispatch::PopFromSchedule() {
+void ExecutorLibdispatch::InvokeSync(void* raw_task) {
+  auto task = static_cast<Task*>(raw_task);
+  task->Execute();
+}
+
+// Test-only methods
+
+bool ExecutorLibdispatch::IsScheduled(Tag tag) const {
+  std::lock_guard<std::mutex> lock(mutex_);
+
+  for (const ScheduleEntry& entry : schedule_) {
+    if (entry.second->tag() == tag) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool ExecutorLibdispatch::IsTaskScheduled(Id id) const {
+  std::lock_guard<std::mutex> lock(mutex_);
+
+  for (const ScheduleEntry& entry : schedule_) {
+    if (entry.second->id() == id) {
+      return true;
+    }
+  }
+  return false;
+}
+
+absl::optional<Task> ExecutorLibdispatch::PopFromSchedule() {
   std::lock_guard<std::mutex> lock(mutex_);
 
   if (schedule_.empty()) {
@@ -290,7 +223,14 @@ absl::optional<TaggedOperation> ExecutorLibdispatch::PopFromSchedule() {
                          return *lhs.second < *rhs.second;
                        });
 
-  return nearest->second->UnscheduleLocked();
+  Task* task = nearest->second;
+  task->Detach();
+  Task result(std::move(*task));
+
+  schedule_.erase(nearest);
+  delete task;
+
+  return result;
 }
 
 ExecutorLibdispatch::Id ExecutorLibdispatch::NextIdLocked() {

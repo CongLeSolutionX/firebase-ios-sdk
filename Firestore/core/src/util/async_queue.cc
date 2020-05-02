@@ -19,6 +19,7 @@
 #include <utility>
 
 #include "Firestore/core/src/util/hard_assert.h"
+#include "Firestore/core/src/util/task.h"
 #include "absl/algorithm/container.h"
 #include "absl/memory/memory.h"
 
@@ -164,8 +165,8 @@ void AsyncQueue::RunScheduledOperationsUntil(const TimerId last_timer_id) {
 
     for (auto next = executor_->PopFromSchedule(); next.has_value();
          next = executor_->PopFromSchedule()) {
-      next->operation();
-      if (next->tag == static_cast<int>(last_timer_id)) {
+      next->Execute();
+      if (next->tag() == static_cast<int>(last_timer_id)) {
         break;
       }
     }
