@@ -32,9 +32,8 @@ def log(command_args):
 
     # When just passing --trace, shorten output to the width of the current
     # window. When running extra verbose don't shorten.
-    if not logging.root.isEnabledFor(logging.INFO):
-      if len(text) >= columns:
-        text = text[0:columns - 5] + ' ...'
+    if not logging.root.isEnabledFor(logging.INFO) and len(text) >= columns:
+      text = text[:columns - 5] + ' ...'
 
     _commands.debug('%s', text)
 

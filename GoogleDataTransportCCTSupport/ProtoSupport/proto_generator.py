@@ -134,15 +134,15 @@ class NanopbGenerator(object):
     cmd = protoc_command(self.args)
 
     gen = os.path.join(os.path.dirname(__file__), OBJC_GENERATOR)
-    cmd.append('--plugin=protoc-gen-nanopb=%s' % gen)
+    cmd.append(f'--plugin=protoc-gen-nanopb={gen}')
 
     nanopb_flags = [
         '--extension=.nanopb',
         '--source-extension=.c',
-        '--no-timestamp'
+        '--no-timestamp',
+        *[f'-I{path}' for path in self.args.include],
     ]
-    nanopb_flags.extend(['-I%s' % path for path in self.args.include])
-    cmd.append('--nanopb_out=%s:%s' % (' '.join(nanopb_flags), out_dir))
+    cmd.append(f"--nanopb_out={' '.join(nanopb_flags)}:{out_dir}")
 
     cmd.extend(self.proto_files)
     run_protoc(self.args, cmd)
@@ -152,7 +152,7 @@ def protoc_command(args):
   """Composes the initial protoc command-line including its include path."""
   cmd = [args.protoc]
   if args.include is not None:
-    cmd.extend(['-I=%s' % path for path in args.include])
+    cmd.extend([f'-I={path}' for path in args.include])
   return cmd
 
 
@@ -263,7 +263,10 @@ def nanopb_rename_delete(lines):
 
 def nanopb_use_module_import(lines):
   """Changes #include <pb.h> to include <nanopb/pb.h>""" # Don't let Copybara alter these lines.
-  return [line.replace('#include <pb.h>', '{}include <nanopb/pb.h>'.format("#")) for line in lines]
+  return [
+      line.replace('#include <pb.h>', '#include <nanopb/pb.h>')
+      for line in lines
+  ]
 
 
 def strip_trailing_whitespace(lines):

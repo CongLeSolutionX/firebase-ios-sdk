@@ -99,7 +99,7 @@ def project_from_workspace_path(path):
     _logger.debug('Using project %s from workspace %s', root, path)
     return root
 
-  raise ValueError('%s is not a valid workspace path' % path)
+  raise ValueError(f'{path} is not a valid workspace path')
 
 
 def find_xcresult_path(project, scheme):
@@ -114,13 +114,13 @@ def find_xcresult_path(project, scheme):
   """
   project_path = find_project_path(project)
   bundle_dir = os.path.join(project_path, 'Logs/Test')
-  prefix = 'Run-' + scheme + '-'
+  prefix = f'Run-{scheme}-'
 
   _logger.debug('Logging for xcresult bundles in %s', bundle_dir)
   xcresult = find_newest_matching_prefix(bundle_dir, prefix)
   if xcresult is None:
     raise LookupError(
-        'Could not find xcresult bundle for %s in %s' % (scheme, bundle_dir))
+        f'Could not find xcresult bundle for {scheme} in {bundle_dir}')
 
   _logger.debug('Found xcresult: %s', xcresult)
   return xcresult
@@ -136,7 +136,7 @@ def find_project_path(project):
     The path containing the newest project output.
   """
   path = os.path.expanduser('~/Library/Developer/Xcode/DerivedData')
-  prefix = project + '-'
+  prefix = f'{project}-'
 
   # DerivedData has directories like Firestore-csljdukzqbozahdjizcvrfiufrkb. Use
   # the most recent one if there are more than one such directory matching the
@@ -144,7 +144,7 @@ def find_project_path(project):
   result = find_newest_matching_prefix(path, prefix)
   if result is None:
     raise LookupError(
-        'Could not find project derived data for %s in %s' % (project, path))
+        f'Could not find project derived data for {project} in {path}')
 
   _logger.debug('Using project derived data in %s', result)
   return result
@@ -219,21 +219,16 @@ def collect_log_output(activity_log, result):
     activity_log: Parsed JSON of an xcresult activity log.
     result: An array into which all log data should be appended.
   """
-  output = activity_log.get('emittedOutput')
-  if output:
+  if output := activity_log.get('emittedOutput'):
     result.append(output['_value'])
-  else:
-    subsections = activity_log.get('subsections')
-    if subsections:
-      for subsection in subsections['_values']:
-        collect_log_output(subsection, result)
+  elif subsections := activity_log.get('subsections'):
+    for subsection in subsections['_values']:
+      collect_log_output(subsection, result)
 
 
 def xcresulttool(*args):
   """Runs xcresulttool and returns its output as a string."""
-  cmd = ['xcrun', 'xcresulttool']
-  cmd.extend(args)
-
+  cmd = ['xcrun', 'xcresulttool', *args]
   command_trace.log(cmd)
 
   return subprocess.check_output(cmd)

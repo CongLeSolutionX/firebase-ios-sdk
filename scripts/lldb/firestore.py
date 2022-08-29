@@ -82,10 +82,7 @@ class AbseilOptional_SynthProvider(object):
   def update(self):
     # Unwrap all the internal optional_data and similar types
     value = self.value
-    while True:
-      if value.GetNumChildren() <= 0:
-        break
-
+    while value.GetNumChildren() > 0:
       child = value.GetChildAtIndex(0)
       if not child.IsValid():
         break
@@ -113,9 +110,7 @@ class AbseilOptional_SynthProvider(object):
   def get_child_index(self, name):
     if name == 'engaged_':
       return 0
-    if name == 'data_':
-      return 1
-    return -1
+    return 1 if name == 'data_' else -1
 
   def get_child_at_index(self, index):
     if index == 0:
@@ -234,15 +229,15 @@ def __lldb_init_module(debugger, params):
   add_synthetic(AbseilOptional_SynthProvider, optional_matcher)
 
   api = 'firebase::firestore::api::'
-  add_summary(DocumentReference_SummaryProvider, api + 'DocumentReference')
-  add_summary(DocumentSnapshot_SummaryProvider, api + 'DocumentSnapshot', '-e')
+  add_summary(DocumentReference_SummaryProvider, f'{api}DocumentReference')
+  add_summary(DocumentSnapshot_SummaryProvider, f'{api}DocumentSnapshot', '-e')
 
   model = 'firebase::firestore::model::'
-  add_summary(DocumentKey_SummaryProvider, model + 'DocumentKey')
-  add_summary(ResourcePath_SummaryProvider, model + 'ResourcePath')
+  add_summary(DocumentKey_SummaryProvider, f'{model}DocumentKey')
+  add_summary(ResourcePath_SummaryProvider, f'{model}ResourcePath')
 
-  add_summary(DatabaseId_SummaryProvider, model + 'DatabaseId')
-  add_synthetic(DatabaseId_SynthProvider, model + 'DatabaseId')
+  add_summary(DatabaseId_SummaryProvider, f'{model}DatabaseId')
+  add_synthetic(DatabaseId_SynthProvider, f'{model}DatabaseId')
 
   add_summary(FIRDocumentReference_SummaryProvider, 'FIRDocumentReference')
 

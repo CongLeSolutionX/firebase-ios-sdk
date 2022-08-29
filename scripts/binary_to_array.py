@@ -86,16 +86,15 @@ def header(header_guard, namespaces, array_name, array_size_name, fileid):
     A list of strings containing the C/C++ header file, line-by-line.
   """
 
-  data = []
-  data.extend([
+  data = [
       "// Copyright 2019 Google Inc. All Rights Reserved.",
       "",
-      "#ifndef %s" % header_guard,
-      "#define %s" % header_guard,
+      f"#ifndef {header_guard}",
+      f"#define {header_guard}",
       "",
       "#include <cstdlib>",
-      ""
-  ])
+      "",
+  ]
   if namespaces:
     data.extend([
         "namespace %s {" % ns for ns in namespaces
@@ -108,13 +107,10 @@ def header(header_guard, namespaces, array_name, array_size_name, fileid):
 
   data.extend([
       "",
-      "extern const size_t %s;" % array_size_name,
-      "extern const unsigned char %s[];" % array_name,
-      "extern const char %s[];" % fileid,
-  ])
-
-  data.extend([
-      ""
+      f"extern const size_t {array_size_name};",
+      f"extern const unsigned char {array_name}[];",
+      f"extern const char {fileid}[];",
+      "",
   ])
   if namespaces:
     data.extend([
@@ -126,11 +122,7 @@ def header(header_guard, namespaces, array_name, array_size_name, fileid):
         "}  // extern \"C\"",
         "#endif  // defined(__cplusplus)"
     ])
-  data.extend([
-      "",
-      "#endif  // %s" % header_guard,
-      ""
-  ])
+  data.extend(["", f"#endif  // {header_guard}", ""])
   return data
 
 
@@ -155,15 +147,14 @@ def source(namespaces, array_name, array_size_name, fileid, filename,
     # Force forward slashes on Windows
     include_name = include_name.replace('\\', '/')
 
-  data = []
-  data.extend([
+  data = [
       "// Copyright 2019 Google Inc. All Rights Reserved.",
       "",
       "#include \"%s\"" % include_name,
       "",
       "#include <cstdlib>",
-      ""
-  ])
+      "",
+  ]
   if namespaces:
     data.extend([
         "namespace %s {" % ns for ns in namespaces
@@ -176,30 +167,26 @@ def source(namespaces, array_name, array_size_name, fileid, filename,
 
   data.extend([
       "",
-      "extern const size_t %s;" % array_size_name,
-      "extern const char %s[];" % fileid,
-      "extern const unsigned char %s[];" % array_name, "",
-      "const unsigned char %s[] = {" % array_name
+      f"extern const size_t {array_size_name};",
+      f"extern const char {fileid}[];",
+      f"extern const unsigned char {array_name}[];",
+      "",
+      "const unsigned char %s[] = {" % array_name,
   ])
   length = len(input_bytes)
   line = ""
-  for idx in range(0, length):
-    if idx % WIDTH == 0:
-      line += "    "
-    else:
-      line += " "
+  for idx in range(length):
+    line += "    " if idx % WIDTH == 0 else " "
     line += "0x%02x," % input_bytes[idx]
     if idx % WIDTH == WIDTH - 1:
       data.append(line)
       line = ""
-  data.append(line)
-  data.append("    0x00  // Extra \\0 to make it a C string")
-
+  data.extend((line, "    0x00  // Extra \\0 to make it a C string"))
   data.extend([
       "};",
       "",
-      "const size_t %s =" % array_size_name,
-      "    sizeof(%s) - 1;" % array_name,
+      f"const size_t {array_size_name} =",
+      f"    sizeof({array_name}) - 1;",
       "",
       "const char %s[] = \"%s\";" % (fileid, filename),
       "",
@@ -245,12 +232,12 @@ def main():
 
   output_source = args.output_source
   if not output_source:
-    output_source = input_file_base + ".cc"
+    output_source = f"{input_file_base}.cc"
     logging.debug("Using default --output_source='%s'", output_source)
 
   output_header = args.output_header
   if not output_header:
-    output_header = input_file_base + ".h"
+    output_header = f"{input_file_base}.h"
     logging.debug("Using default --output_header='%s'", output_header)
 
   root_dir = _get_repo_root()
@@ -262,17 +249,17 @@ def main():
   identifier_base = sub("[^0-9a-zA-Z]+", "_", path.basename(input_file_base))
   array_name = args.array
   if not array_name:
-    array_name = identifier_base + "_data"
+    array_name = f"{identifier_base}_data"
     logging.debug("Using default --array='%s'", array_name)
 
   array_size_name = args.array_size
   if not array_size_name:
-    array_size_name = identifier_base + "_size"
+    array_size_name = f"{identifier_base}_size"
     logging.debug("Using default --array_size='%s'", array_size_name)
 
   fileid = args.filename_identifier
   if not fileid:
-    fileid = identifier_base + "_filename"
+    fileid = f"{identifier_base}_filename"
     logging.debug("Using default --filename_identifier='%s'", fileid)
 
   filename = args.filename

@@ -110,11 +110,11 @@ def find_lines_matching(pattern, sources=None):
 
 def make_patterns(dirs):
   """Returns a list of git match patterns for the given directories."""
-  return ['%s/**' % d for d in dirs]
+  return [f'{d}/**' for d in dirs]
 
 
 def make_exclusions(dirs):
-  return [':(exclude)' + d for d in dirs]
+  return [f':(exclude){d}' for d in dirs]
 
 
 def standard_exclusions():

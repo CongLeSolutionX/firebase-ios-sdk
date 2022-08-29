@@ -67,10 +67,7 @@ def main():
   else:
     text = read_changelog_section(args.changelog, args.only)
 
-  product = None
-  if not args.all:
-    product = PRODUCTS.get(args.changelog)
-
+  product = None if args.all else PRODUCTS.get(args.changelog)
   renderer = Renderer(args.repo, product)
   translator = Translator(renderer)
 
@@ -82,10 +79,9 @@ def find_local_repo():
   url = six.ensure_text(
       subprocess.check_output(['git', 'config', '--get', 'remote.origin.url']))
 
-  # ssh or https style URL
-  m = re.match(r'^(?:git@github\.com:|https://github\.com/)(.*)\.git$', url)
-  if m:
-    return m.group(1)
+  if m := re.match(r'^(?:git@github\.com:|https://github\.com/)(.*)\.git$',
+                   url):
+    return m[1]
 
   raise LookupError('Can\'t figure local repo from remote URL %s' % url)
 
@@ -103,11 +99,7 @@ class Renderer(object):
 
   def heading(self, heading):
     if self.product:
-      if self.product == NO_HEADING:
-        return ''
-      else:
-        return '### %s\n' % self.product
-
+      return '' if self.product == NO_HEADING else '### %s\n' % self.product
     return heading
 
   def bullet(self, spacing):
@@ -115,7 +107,7 @@ class Renderer(object):
 
     All bulleted lists in devsite are '*' style.
     """
-    return '%s* ' % spacing
+    return f'{spacing}* '
 
   def change_type(self, tag):
     """Renders a change type tag as the appropriate double-braced macro.
@@ -126,18 +118,13 @@ class Renderer(object):
     return '{{%s}}' % tag
 
   def url(self, url):
-    m = re.match(r'^(?:https:)?(//github.com/(.*)/issues/(\d+))$', url)
-    if m:
-      link = m.group(1)
-      repo = m.group(2)
-      issue = m.group(3)
+    if m := re.match(r'^(?:https:)?(//github.com/(.*)/issues/(\d+))$', url):
+      link = m[1]
+      repo = m[2]
+      issue = m[3]
 
-      if repo == self.local_repo:
-        text = '#' + issue
-      else:
-        text = repo + '#' + issue
-
-      return '[%s](%s)' % (text, link)
+      text = f'#{issue}' if repo == self.local_repo else f'{repo}#{issue}'
+      return f'[{text}]({link})'
 
     return url
 
@@ -152,8 +139,8 @@ class Renderer(object):
     issue_list = issues.split(", ")
     for issue in issue_list:
       issue = issue.translate(None, string.punctuation)
-      link = '//github.com/%s/issues/%s' % (self.local_repo, issue)
-      issue_link_list.append('[#%s](%s)' % (issue, link))
+      link = f'//github.com/{self.local_repo}/issues/{issue}'
+      issue_link_list.append(f'[#{issue}]({link})')
     return "(" + ", ".join(issue_link_list) + ")"
 
   def text(self, text):
@@ -174,7 +161,7 @@ class Translator(object):
         if not m:
           continue
 
-        callback = getattr(self, 'parse_' + key)
+        callback = getattr(self, f'parse_{key}')
         callback_result = callback(m)
         result += callback_result
 
@@ -270,10 +257,10 @@ def read_changelog_section(filename, single_version=None):
           initial = False
           result.append(line)
 
-      else:
-        if heading.match(line):
-          break
+      elif heading.match(line):
+        break
 
+      else:
         result.append(line)
 
     # Prune extra newlines

@@ -67,8 +67,7 @@ def SetupArguments():
       action='store_true',
       help='Skip all of script except pushing podspecs to cpdc_internal')
 
-  args = parser.parse_args()
-  return args
+  return parser.parse_args()
 
 
 def LogOrRun(command):
@@ -101,12 +100,11 @@ def GetVersionData(git_root, version):
   Returns:
     Dictionary with pod keys and version values.
   """
-  json_file = os.path.join(git_root, 'Releases', 'Manifests',
-                           '{}.json'.format(version))
+  json_file = os.path.join(git_root, 'Releases', 'Manifests', f'{version}.json')
   if os.path.isfile(json_file):
     return json.load(open(json_file))
   else:
-    sys.exit('Missing version file:{}'.format(json_file))
+    sys.exit(f'Missing version file:{json_file}')
 
 
 def CreateReleaseBranch(release_branch, base_branch):
@@ -115,12 +113,12 @@ def CreateReleaseBranch(release_branch, base_branch):
   Args:
     release_branch: the name of the git release branch.
   """
-  os.system('git checkout {}'.format(base_branch))
+  os.system(f'git checkout {base_branch}')
   os.system('git pull')
-  os.system('git checkout -b {}'.format(release_branch))
-  LogOrRun('git push origin {}'.format(release_branch))
-  LogOrRun('git branch --set-upstream-to=origin/{} {}'.format(release_branch,
-                                                              release_branch))
+  os.system(f'git checkout -b {release_branch}')
+  LogOrRun(f'git push origin {release_branch}')
+  LogOrRun(
+      f'git branch --set-upstream-to=origin/{release_branch} {release_branch}')
 
 
 def UpdatePodSpecs(git_root, version_data, firebase_version):
@@ -132,12 +130,14 @@ def UpdatePodSpecs(git_root, version_data, firebase_version):
     firebase_version: the Firebase version.
   """
   core_podspec = os.path.join(git_root, 'FirebaseCore.podspec')
-  os.system("sed -i.bak -e \"s/\\(Firebase_VERSION=\\).*'/\\1{}'/\" {}".format(
-      firebase_version, core_podspec))
+  os.system(
+      f"""sed -i.bak -e \"s/\\(Firebase_VERSION=\\).*'/\\1{firebase_version}'/\" {core_podspec}"""
+  )
   for pod, version in version_data.items():
-    podspec = os.path.join(git_root, '{}.podspec'.format(pod))
-    os.system("sed -i.bak -e \"s/\\(\\.version.*=[[:space:]]*'\\).*'/\\1{}'/\" "
-              '{}'.format(version, podspec))
+    podspec = os.path.join(git_root, f'{pod}.podspec')
+    os.system(
+        f"""sed -i.bak -e \"s/\\(\\.version.*=[[:space:]]*'\\).*'/\\1{version}'/\" {podspec}"""
+    )
 
 
 def UpdatePodfiles(git_root, version):
@@ -173,10 +173,10 @@ def GenerateTag(pod, version):
   if pod == "Firebase":
     return version
   if pod.startswith("Firebase"):
-    return '{}-{}'.format(pod[len('Firebase'):], version)
+    return f"{pod[len('Firebase'):]}-{version}"
   if pod.startswith("Google"):
-    return '{}-{}'.format(pod[len('Google'):], version)
-  sys.exit("Script does not support generating a tag for {}".format(pod))
+    return f"{pod[len('Google'):]}-{version}"
+  sys.exit(f"Script does not support generating a tag for {pod}")
 
 
 def UpdateTags(version_data, first=False):
@@ -190,10 +190,10 @@ def UpdateTags(version_data, first=False):
   for pod, version in version_data.items():
     tag = GenerateTag(pod, version)
     if not first:
-      LogOrRun("git push --delete origin '{}'".format(tag))
-      LogOrRun("git tag --delete  '{}'".format(tag))
-    LogOrRun("git tag '{}'".format(tag))
-    LogOrRun("git push origin '{}'".format(tag))
+      LogOrRun(f"git push --delete origin '{tag}'")
+      LogOrRun(f"git tag --delete  '{tag}'")
+    LogOrRun(f"git tag '{tag}'")
+    LogOrRun(f"git push origin '{tag}'")
 
 
 def CheckVersions(version_data, firebase_version):
@@ -223,11 +223,12 @@ def GetCpdcInternal():
 
 """
   tmp_file = tempfile.mktemp()
-  os.system('pod repo list | grep -B2 sso://cpdc-internal/firebase | head -1 > {}'
-            .format(tmp_file))
+  os.system(
+      f'pod repo list | grep -B2 sso://cpdc-internal/firebase | head -1 > {tmp_file}'
+  )
   with open(tmp_file,'r') as o:
     output_var = ''.join(o.readlines()).strip()
-  os.system('rm -rf {}'.format(tmp_file))
+  os.system(f'rm -rf {tmp_file}')
   return output_var
 
 
@@ -242,22 +243,20 @@ def PushPodspecs(version_data):
   """
   pods = version_data.keys()
   for pod in pods:
-    LogOrRun('pod cache clean {} --all'.format(pod))
+    LogOrRun(f'pod cache clean {pod} --all')
     if pod == 'Firebase':
       # Do the Firebase pod last
       continue
-    if pod == 'FirebaseFirestore':
-      warnings_ok = ' --allow-warnings'
-    else:
-      warnings_ok = ''
-
-    podspec = '{}.podspec'.format(pod)
-    LogAndRun('pod repo push --skip-tests --use-json {} {}{}'
-             .format(GetCpdcInternal(), podspec, warnings_ok))
+    warnings_ok = ' --allow-warnings' if pod == 'FirebaseFirestore' else ''
+    podspec = f'{pod}.podspec'
+    LogAndRun(
+        f'pod repo push --skip-tests --use-json {GetCpdcInternal()} {podspec}{warnings_ok}'
+    )
   # This command will need to be rerun if any pods need to be pushed from Rapid.
-  LogAndRun('pod repo push --skip-tests --use-json --skip-import-validation ' +
-           '--sources=sso://cpdc-internal/firebase.git,https://cdn.cocoapods.org' +
-           ' {} Firebase.podspec {}'.format(GetCpdcInternal(), warnings_ok))
+  LogAndRun(
+      ('pod repo push --skip-tests --use-json --skip-import-validation ' +
+       '--sources=sso://cpdc-internal/firebase.git,https://cdn.cocoapods.org' +
+       f' {GetCpdcInternal()} Firebase.podspec {warnings_ok}'))
 
 
 def UpdateVersions():
@@ -284,14 +283,13 @@ def UpdateVersions():
       return
 
     CheckVersions(version_data, args.version)
-    release_branch = 'release-{}'.format(args.version)
+    release_branch = f'release-{args.version}'
     CreateReleaseBranch(release_branch, args.base_branch)
     UpdatePodSpecs(git_root, version_data, args.version)
     UpdatePodfiles(git_root, args.version)
 
-    LogOrRun('git commit -am "Update versions for Release {}"'
-             .format(args.version))
-    LogOrRun('git push origin {}'.format(release_branch))
+    LogOrRun(f'git commit -am "Update versions for Release {args.version}"')
+    LogOrRun(f'git push origin {release_branch}')
     UpdateTags(version_data, True)
 
   PushPodspecs(version_data)

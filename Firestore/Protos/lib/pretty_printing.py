@@ -169,7 +169,7 @@ class FieldPrettyPrinting:
     """Generates a C++ statement that prints the repeated field, if non-empty.
     """
 
-    count = self.name + '_count'
+    count = f'{self.name}_count'
 
     result = '''\
     for (pb_size_t i = 0; i != %s; ++i) {\n''' % count
@@ -248,7 +248,7 @@ class FieldPrettyPrinting:
       cc_name += '[i]'
 
     if parent_oneof and not parent_oneof.is_anonymous:
-      cc_name = parent_oneof.name + '.' + cc_name
+      cc_name = f'{parent_oneof.name}.{cc_name}'
 
     return cc_name
 
@@ -309,7 +309,7 @@ class OneOfPrettyPrinting(FieldPrettyPrinting):
 
     self._full_classname = str(message_desc.name)
 
-    self._which = 'which_' + field_desc.name
+    self._which = f'which_{field_desc.name}'
     self.is_anonymous = field_desc.anonymous
     self._fields = [FieldPrettyPrinting(f, message_desc) for f in
                     field_desc.fields]
@@ -323,7 +323,7 @@ class OneOfPrettyPrinting(FieldPrettyPrinting):
     switch (%s) {\n''' % which
 
     for f in self._fields:
-      tag_name = '%s_%s_tag' % (self._full_classname, f.name)
+      tag_name = f'{self._full_classname}_{f.name}_tag'
       result += '''\
     case %s:\n''' % tag_name
 
@@ -387,7 +387,7 @@ const char* EnumToString(
     switch (value) {\n''' % self.name
 
     for full_name in self._members:
-      short_name = full_name.replace('%s_' % self.name, '')
+      short_name = full_name.replace(f'{self.name}_', '')
       result += '''\
     case %s:
         return "%s";\n''' % (full_name, short_name)

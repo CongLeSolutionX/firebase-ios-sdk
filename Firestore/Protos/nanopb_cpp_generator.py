@@ -153,8 +153,7 @@ def iterate_messages(request):
     message_type: a DescriptorProto for the message.
   """
   for fdesc in request.proto_file:
-    for names, message_type in nanopb.iterate_messages(fdesc):
-      yield names, message_type
+    yield from nanopb.iterate_messages(fdesc)
 
 
 def nanopb_parse_options(request):
@@ -195,13 +194,10 @@ def nanopb_parse_files(request, options):
     A dictionary of filename to nanopb.ProtoFile objects, each one representing
     the parsed form of a FileDescriptor in the request.
   """
-  # Process any include files first, in order to have them available as
-  # dependencies
-  parsed_files = {}
-  for fdesc in request.proto_file:
-    parsed_files[fdesc.name] = nanopb.parse_file(fdesc.name, fdesc, options)
-
-  return parsed_files
+  return {
+      fdesc.name: nanopb.parse_file(fdesc.name, fdesc, options)
+      for fdesc in request.proto_file
+  }
 
 
 def create_pretty_printing(parsed_files):
@@ -372,7 +368,7 @@ def nanopb_augment_header(generated_header, file_pretty_printing):
   for e in file_pretty_printing.enums:
     generated_header.insert('eof', e.generate_declaration())
   for m in file_pretty_printing.messages:
-    generated_header.insert('struct:' + m.full_classname, m.generate_declaration())
+    generated_header.insert(f'struct:{m.full_classname}', m.generate_declaration())
 
   close_namespace(generated_header)
 

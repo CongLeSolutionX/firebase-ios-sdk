@@ -87,13 +87,13 @@ class LanguageBreakdown:
     }
 
   def classify(self, kind, reason, filename):
-    _classify_logger.debug('classify %s: %s (%s)' % (kind, filename, reason))
+    _classify_logger.debug(f'classify {kind}: {filename} ({reason})')
     self.kinds[kind].append(filename)
     self.all.append(filename)
 
   @staticmethod
   def ignore(filename):
-    _classify_logger.debug('classify ignored: %s' % filename)
+    _classify_logger.debug(f'classify ignored: {filename}')
 
 
 def categorize_files(files):
@@ -113,8 +113,7 @@ def categorize_files(files):
       continue
 
     ext = os.path.splitext(filename)[1]
-    definite = _DEFINITE_EXTENSIONS.get(ext)
-    if definite:
+    if definite := _DEFINITE_EXTENSIONS.get(ext):
       result.classify(definite, 'extension', filename)
       continue
 
@@ -164,10 +163,7 @@ def shard(group, num_shards):
   Returns:
     A list of shards.
   """
-  shards = []
-  for i in range(num_shards):
-    shards.append(LanguageBreakdown())
-
+  shards = [LanguageBreakdown() for _ in range(num_shards)]
   pos = 0
   for kind, files in group.kinds.items():
     for filename in files:
@@ -208,10 +204,7 @@ def _related_file_ext(header):
   files = _related_files(root)
   exts = {os.path.splitext(f)[1] for f in files}
 
-  for ext in ('.cc', '.m', '.mm'):
-    if ext in exts:
-      return ext
-  return None
+  return next((ext for ext in ('.cc', '.m', '.mm') if ext in exts), None)
 
 
 def _related_files(root):
@@ -222,7 +215,7 @@ def _related_files(root):
     # dirname returns empty for filenames that are already a basename.
     parent = '.'
 
-  pattern = os.path.basename(root) + '*'
+  pattern = f'{os.path.basename(root)}*'
   return fnmatch.filter(_list_files(parent), pattern)
 
 
@@ -241,8 +234,6 @@ _list_files.cache = {}
 
 def _in_directories(filename, dirs):
   """Tests whether `filename` is anywhere in any of the given dirs."""
-  for dirname in dirs:
-    if (filename.startswith(dirname)
-        and (len(filename) == len(dirname) or filename[len(dirname)] == '/')):
-      return True
-  return False
+  return any((filename.startswith(dirname) and (
+      len(filename) == len(dirname) or filename[len(dirname)] == '/'))
+             for dirname in dirs)

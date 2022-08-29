@@ -130,20 +130,15 @@ class NanopbGenerator(object):
     cmd = protoc_command(self.args)
 
     gen = os.path.join(os.path.dirname(__file__), CPP_GENERATOR)
-    cmd.append('--plugin=protoc-gen-nanopb=%s' % gen)
+    cmd.append(f'--plugin=protoc-gen-nanopb={gen}')
 
     nanopb_flags = ' '.join([
         '--extension=.nanopb',
         '--source-extension=.cc',
         '--no-timestamp',
-        # Make sure Nanopb finds the `.options` files. See
-        # https://jpa.kapsi.fi/nanopb/docs/reference.html#defining-the-options-in-a-options-file
-        # "...if your .proto is in a subdirectory, nanopb may have trouble
-        # finding the associated .options file. A workaround is to specify
-        # include path separately to the nanopb plugin"
-        '-I' + self.args.protos_dir,
+        f'-I{self.args.protos_dir}',
     ])
-    cmd.append('--nanopb_out=%s:%s' % (nanopb_flags, out_dir))
+    cmd.append(f'--nanopb_out={nanopb_flags}:{out_dir}')
 
     cmd.extend(self.proto_files)
     run_protoc(self.args, cmd)
@@ -176,7 +171,7 @@ class ObjcProtobufGenerator(object):
     """Invokes protoc using the objc plugin."""
     cmd = protoc_command(self.args)
 
-    cmd.extend(['--objc_out=' + out_dir])
+    cmd.extend([f'--objc_out={out_dir}'])
     cmd.extend(self.proto_files)
     run_protoc(self.args, cmd)
 
@@ -217,7 +212,7 @@ class CppProtobufGenerator(object):
     """Invokes protoc using using the default C++ generator."""
 
     cmd = protoc_command(self.args)
-    cmd.append('--cpp_out=' + out_dir)
+    cmd.append(f'--cpp_out={out_dir}')
     cmd.extend(self.proto_files)
 
     run_protoc(self.args, cmd)
@@ -227,7 +222,7 @@ def protoc_command(args):
   """Composes the initial protoc command-line including its include path."""
   cmd = [args.protoc]
   if args.include is not None:
-    cmd.extend(['-I%s' % path for path in args.include])
+    cmd.extend([f'-I{path}' for path in args.include])
   return cmd
 
 

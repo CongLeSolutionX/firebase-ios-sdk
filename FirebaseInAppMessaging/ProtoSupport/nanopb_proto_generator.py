@@ -109,8 +109,7 @@ def iterate_messages(request):
     message_type: a DescriptorProto for the message.
   """
   for fdesc in request.proto_file:
-    for names, message_type in nanopb.iterate_messages(fdesc):
-      yield names, message_type
+    yield from nanopb.iterate_messages(fdesc)
 
 
 def nanopb_parse_options(request):
@@ -151,13 +150,10 @@ def nanopb_parse_files(request, options):
     A dictionary of filename to nanopb.ProtoFile objects, each one representing
     the parsed form of a FileDescriptor in the request.
   """
-  # Process any include files first, in order to have them
-  # available as dependencies
-  parsed_files = {}
-  for fdesc in request.proto_file:
-    parsed_files[fdesc.name] = nanopb.parse_file(fdesc.name, fdesc, options)
-
-  return parsed_files
+  return {
+      fdesc.name: nanopb.parse_file(fdesc.name, fdesc, options)
+      for fdesc in request.proto_file
+  }
 
 
 def nanopb_generate(request, options, parsed_files):

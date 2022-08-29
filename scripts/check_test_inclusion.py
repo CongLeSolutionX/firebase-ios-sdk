@@ -33,10 +33,8 @@ def Main():
   """Runs the style check."""
 
   tests = FindTestFiles("Firestore/Example/Tests", "Firestore/core/test")
-  problems = CheckProject(
-      "Firestore/Example/Firestore.xcodeproj/project.pbxproj", tests)
-
-  if problems:
+  if problems := CheckProject(
+      "Firestore/Example/Firestore.xcodeproj/project.pbxproj", tests):
     Error("Test files exist that are unreferenced in Xcode project files:")
     for problem in problems:
       Error(problem)
@@ -86,9 +84,8 @@ def CheckProject(project_file, test_files):
   with open(project_file, "r") as fd:
     for line in fd:
       line = line.rstrip()
-      m = file_list_pattern.search(line)
-      if m:
-        basename = m.group(1)
+      if m := file_list_pattern.search(line):
+        basename = m[1]
         if basename in basenames:
           del basenames[basename]
 
